@@ -289,6 +289,7 @@ ALL_PROGRAMMES = tuple(sorted([
     ('designproducts', 'Design Products'),
     ('industrialdesignengineering', 'Industrial Design Engineering'),
     ('goldsmithingsilversmithingmetalworkjewellery', 'Goldsmithing, Silversmithing, Metalwork & Jewellery'),
+    ('jewelleryandmetal', 'Jewellery & Metal'),
     ('visualcommunication', 'Visual Communication'),
     ('designinteractions', 'Design Interactions'),
     ('innovationdesignengineering', 'Innovation Design Engineering'),
@@ -320,7 +321,7 @@ SCHOOL_PROGRAMME_MAP = {
         'schoolofdesign': ['designinteractions', 'designproducts', 'globalinnovationdesign', 'innovationdesignengineering', 'servicedesign', 'vehicledesign'],
         'schooloffineart': ['painting', 'photography', 'printmaking', 'sculpture'],
         'schoolofhumanities': ['criticalhistoricalstudies', 'criticalwritinginartdesign', 'curatingcontemporaryart', 'historyofdesign'],
-        'schoolofmaterial': ['ceramicsglass', 'goldsmithingsilversmithingmetalworkjewellery', 'fashionmenswear', 'fashionwomenswear', 'textiles'],
+        'schoolofmaterial': ['ceramicsglass', 'goldsmithingsilversmithingmetalworkjewellery', 'jewelleryandmetal', 'fashionmenswear', 'fashionwomenswear', 'textiles'],
     },
     '2013': {
         'schoolofarchitecture': ['architecture'],
@@ -383,6 +384,24 @@ PROGRAMME_CHOICES = sorted([
     for year, mapping
     in SCHOOL_PROGRAMME_MAP.items()
 ], reverse=True)
+
+
+def get_programme_synonyms(programme):
+    """ Find all programme identifiers that appear on the same programme page.
+        E.g. jewelleryandmetal and goldsmithingsilversmithingmetalworkjewellery
+        are both associated with the same ProgrammePage and if one of them
+        is selected in a filter then we want to return results for both.
+    """
+    programmes = ProgrammePageProgramme.objects\
+        .filter(page__programmes__programme=programme)\
+        .only('programme')\
+        .distinct()\
+        .values_list('programme', flat=True)
+
+    if programmes.exists():
+        return list(programmes)
+    else:
+        return [programme]
 
 
 # Make sure the values in SCHOOL_PROGRAMME_MAP are valid (`sum(list, [])` flattens a list)
@@ -916,8 +935,15 @@ class ProgrammePageAd(Orderable):
         SnippetChooserPanel('ad', Advert),
     ]
 
+
+class ProgrammePageProgramme(models.Model):
+    page = ParentalKey('rca.ProgrammePage', related_name='programmes')
+    programme = models.CharField(max_length=255, choices=PROGRAMME_CHOICES, blank=True, help_text=help_text('rca.ProgrammePageProgramme', 'programme'))
+
+    panels = [FieldPanel('programme')]
+
+
 class ProgrammePage(Page, SocialFields, SidebarBehaviourFields):
-    programme = models.CharField(max_length=255, choices=PROGRAMME_CHOICES, help_text=help_text('rca.ProgrammePage', 'programme'))
     school = models.CharField(max_length=255, choices=SCHOOL_CHOICES, help_text=help_text('rca.ProgrammePage', 'school'))
     background_image = models.ForeignKey('rca.RcaImage', null=True, blank=True, on_delete=models.SET_NULL, related_name='+', help_text=help_text('rca.ProgrammePage', 'background_image', default="The full bleed image in the background"))
     head_of_programme = models.ForeignKey('rca.StaffPage', null=True, blank=True, on_delete=models.SET_NULL, related_name='+', help_text=help_text('rca.ProgrammePage', 'head_of_programme', default="Select the profile page of the head of this programme."))
@@ -946,6 +972,15 @@ class ProgrammePage(Page, SocialFields, SidebarBehaviourFields):
 
     search_name = 'Programme'
 
+    def get_programme_display(self):
+        programmes = ProgrammePageProgramme.objects\
+            .filter(page=self)\
+            .only('programme')\
+            .distinct()\
+            .values_list('programme', flat=True)
+        programme_labels = dict(ALL_PROGRAMMES)
+        return ", ".join([programme_labels[p] for p in programmes])
+
     @property
     def staff_feed(self):
         # Get staff from manual feed
@@ -962,7 +997,7 @@ class ProgrammePage(Page, SocialFields, SidebarBehaviourFields):
 
     @vary_on_headers('X-Requested-With')
     def serve(self, request):
-        research_items = ResearchItem.objects.filter(live=True, programme=self.programme).order_by('random_order')
+        research_items = ResearchItem.objects.filter(live=True, programme__in=self.programmes.values('programme')).order_by('random_order')
 
         per_page = 4
         paginator = Paginator(research_items, per_page)
@@ -1040,7 +1075,9 @@ ProgrammePage.promote_panels = [
     ], 'Social networks'),
 
     FieldPanel('school'),
-    FieldPanel('programme'),
+
+    # TODO: can't enforce the minumum number of inlines just yet: https://github.com/torchbox/wagtail/issues/669
+    InlinePanel(ProgrammePage, 'programmes', label="Programmes (*at least one is required)"),
 ]
 
 ProgrammePage.settings_panels = [
@@ -2599,7 +2636,7 @@ class HomePage(Page, SocialFields):
         #     events = self.future_events()
 
         # if programme and programme != '':
-        #     events = events.filter(related_programmes__programme=programme)
+             # events = events.filter(related_programmes__programme__in=get_programme_synonyms(programme))
         # if school and school != 'all':
         #     events = events.filter(related_schools__school=school)
         # if location and location != '':
@@ -4518,7 +4555,7 @@ class ResearchItem(Page, SocialFields):
         # Get related research
         research_items = ResearchItem.objects.filter(live=True).order_by('random_order')
         if self.programme:
-            research_items = research_items.filter(programme=self.programme)
+            research_items = research_items.filter(programme__in=get_programme_synonyms(self.programme))
         else:
             research_items = research_items.filter(school=self.school)
 
@@ -4548,7 +4585,7 @@ class ResearchItem(Page, SocialFields):
     def get_related_news(self, count=4):
         return NewsItem.get_related(
             areas=['research'],
-            programmes=([self.programme] if self.programme else None),
+            programmes=get_programme_synonyms(self.programme) if self.programme else None,
             schools=([self.school] if self.school else None),
             count=count,
         )
@@ -5218,7 +5255,7 @@ class InnovationRCAProject(Page, SocialFields):
         projects = InnovationRCAProject.objects.filter(live=True).order_by('random_order')
         projects = projects.filter(project_type=self.project_type)
         if self.programme:
-            projects = projects.filter(programme=self.programme)
+            projects = projects.filter(programme__in=get_programme_synonyms(self.programme))
         elif self.school:
             projects = projects.filter(school=self.school)
 
@@ -5248,7 +5285,7 @@ class InnovationRCAProject(Page, SocialFields):
     def get_related_news(self, count=4):
         return NewsItem.get_related(
             areas=['research'],
-            programmes=([self.programme] if self.programme else None),
+            programmes=get_programme_synonyms(self.programme) if self.programme else None,
             schools=([self.school] if self.school else None),
             count=count,
         )
@@ -5479,7 +5516,7 @@ class ReachOutRCAProject(Page, SocialFields):
         projects = ReachOutRCAProject.objects.filter(live=True).order_by('random_order')
         projects = projects.filter(project=self.project)
         if self.programme:
-            projects = projects.filter(programme=self.programme)
+            projects = projects.filter(programme__in=get_programme_synonyms(self.programme))
         elif self.school:
             projects = projects.filter(school=self.school)
 
@@ -5509,7 +5546,7 @@ class ReachOutRCAProject(Page, SocialFields):
     def get_related_news(self, count=4):
         return NewsItem.get_related(
             areas=['research'],
-            programmes=([self.programme] if self.programme else None),
+            programmes=get_programme_synonyms(self.programme) if self.programme else None,
             schools=([self.school] if self.school else None),
             count=count,
         )
