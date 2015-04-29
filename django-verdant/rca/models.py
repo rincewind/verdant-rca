@@ -310,10 +310,18 @@ ALL_PROGRAMMES = tuple(sorted([
     ('conservation', 'Conservation'),
     ('vehicledesign', 'Vehicle Design'),
     ('communicationartdesign', 'Communication Art & Design'),
-], key=lambda programme: programme[0])) # ALL_PROGRAMMES needs to be in alphabetical order (#504 Issue 1)
+], key=lambda programme: programme[0]))  # ALL_PROGRAMMES needs to be in alphabetical order (#504 Issue 1)
 
 
 SCHOOL_PROGRAMME_MAP = {
+    '2015': {
+        'schoolofarchitecture': ['architecture', 'interiordesign'],
+        'schoolofcommunication': ['animation', 'informationexperiencedesign', 'visualcommunication'],
+        'schoolofdesign': ['designinteractions', 'designproducts', 'globalinnovationdesign', 'innovationdesignengineering', 'servicedesign', 'vehicledesign'],
+        'schooloffineart': ['painting', 'photography', 'printmaking', 'sculpture'],
+        'schoolofhumanities': ['criticalhistoricalstudies', 'criticalwritinginartdesign', 'curatingcontemporaryart', 'historyofdesign'],
+        'schoolofmaterial': ['ceramicsglass', 'goldsmithingsilversmithingmetalworkjewellery', 'fashionmenswear', 'fashionwomenswear', 'textiles'],
+    },
     '2014': {
         'schoolofarchitecture': ['architecture', 'interiordesign'],
         'schoolofcommunication': ['animation', 'informationexperiencedesign', 'visualcommunication'],
