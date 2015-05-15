@@ -166,9 +166,10 @@ def save_page(page, request):
     """
 
     submit = False
+    locked = page.locked
     if 'submit_for_publication' in request.POST:
         submit = True
-        page.locked = True
+        locked = True
         messages.success(request, "Profile page '{}' was submitted for moderation".format(page.title))
 
     revision = page.save_revision(
@@ -176,8 +177,14 @@ def save_page(page, request):
         submitted_for_moderation=submit,
     )
 
-    page.has_unpublished_changes = True
-    page.save()
+    if page.live:
+        # To avoid overwriting the live version, we only save the page
+        # to the revisions table
+        Page.objects.filter(id=page.id).update(has_unpublished_changes=True, locked=locked)
+    else:
+        page.has_unpublished_changes = True
+        page.locked = locked
+        page.save()
 
     return revision
 
@@ -197,7 +204,7 @@ def overview(request, page_id=None):
             return redirect('student-profiles:disambiguate')
         return redirect('student-profiles:overview-specific', NewStudentPage.objects.get(owner=request.user).id)
     elif page_id is not None:
-        page = NewStudentPage.objects.filter(owner=request.user)[0]
+        page = get_object_or_404(NewStudentPage, id=page_id)
         data, page = initial_context(request, page.id)
         return render(request, 'student_profiles/overview.html', data)
 
@@ -858,14 +865,9 @@ def image_upload(request, page_id, field=None, max_size=None, min_dim=None, forc
         if field:
             # set the field to the image
             setattr(profile_page, field, r)
-            revision = profile_page.save_revision(
-                user=request.user,
-                submitted_for_moderation=False,
-            )
 
-            profile_page.has_unpublished_changes = True
-            profile_page.save()
-        
+            save_page(profile_page, request)
+
         return HttpResponse('{{"ok": true, "id": {} }}'.format(r.id), content_type='application/json')
     else:
         errors = ', '.join(', '.join(el) for el in form.errors.values())

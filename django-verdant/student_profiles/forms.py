@@ -177,6 +177,8 @@ class ImageForm(forms.Form):
         self.min_dim = None
         if 'max_size' in kwargs:
             self.max_size = kwargs.pop('max_size')
+        else:
+            self.max_size = 10 * 1024 * 1024
         if 'min_dim' in kwargs:
             self.min_dim = kwargs.pop('min_dim')
 
@@ -189,8 +191,15 @@ class ImageForm(forms.Form):
         if self.max_size and img.size > self.max_size:
             raise forms.ValidationError(u'Please keep file size under 10MB. Current file size {}'.format(filesizeformat(img.size)))
 
-        if self.min_dim:
+        try:
             dt = Image.open(img)
+            if dt.format.upper() not in ('PNG', 'JPEG', 'GIF', 'MPO'):
+                raise forms.ValidationError(u'Only images of types JPEG and GIF are allowed. Please make sure that you save the image file as the specified format, instead of simply changing the file extension.')
+
+        except IOError:
+            raise forms.ValidationError(u'Only images of types JPEG and GIF are allowed. Please make sure that you save the image file as the specified format, instead of simply changing the file extension.')
+
+        if self.min_dim:
             minX, minY = self.min_dim
             width, height = dt.size
             if (width < minX or height < minY) and (height < minX or width < minY):
@@ -355,7 +364,7 @@ class PostcardUploadForm(forms.ModelForm):
     postcard_image = forms.IntegerField(
         label='Postcard image',
         required=False,
-        help_text="Image will be used to print a set of postcards with your contact details, for you to use during the Show. The image will not appear in your Show online catalogue. Image must be A6 plus 2mm 'bleed' on each edge (1801 x 1287px, ie. 152 x 109mm @ 300 dpi). This must be uploaded at the correct size and before the deadline for postcards to be printed.",
+        help_text="Image will be used to print a set of postcards with your contact details, for you to use during the Show. The image will not appear in your Show online catalogue. Image must be A6 plus 2mm 'bleed' on each edge (1795 x 1287px, ie. 152 x 109mm @ 300 dpi). This must be uploaded at the correct size and before the deadline for postcards to be printed.",
         widget=ImageInput,
     )
 
